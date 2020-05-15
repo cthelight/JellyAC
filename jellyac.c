@@ -1,14 +1,17 @@
 #include "jellyac.h"
+#include "websock.h"
 #include <curl/curl.h>
 #include <sys/time.h>
 #include <time.h>
 
 #define JELLYAC_CLIENT "JellyAC"
 #define JELLYAC_DEVICE "JellyAC"
-#define JELLYAC_VERSION "10.5.5"
+#define JELLYAC_VERSION "0.0.1"
 
 #define JELLYAC_ACC_TOK_ID_STR "AccessToken"
 #define JELLYAC_USR_ID_ID_STR "UserId"
+
+const char * full_json_str = "{\"PlayableMediaTypes\":[\"Audio\"],\"SupportedCommands\":[\"VolumeUp\",\"VolumeDown\",\"Mute\",\"Unmute\",\"ToggleMute\",\"SetVolume\", \"SetRepeatMode\",\"PlayMediaSource\"],\"SupportsPersistentIdentifier\":false,\"SupportsMediaControl\":true,\"DeviceProfile\":{\"MaxStreamingBitrate\":120000000,\"MaxStaticBitrate\":100000000,\"MusicStreamingTranscodingBitrate\":192000,\"DirectPlayProfiles\":[{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\"},{\"Container\":\"flac\",\"Type\":\"Audio\"},{\"Container\":\"webma,webm\",\"Type\":\"Audio\"},{\"Container\":\"wav\",\"Type\":\"Audio\"},{\"Container\":\"ogg\",\"Type\":\"Audio\"}],\"TranscodingProfiles\":[{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"opus\",\"Type\":\"Audio\",\"AudioCodec\":\"opus\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"wav\",\"Type\":\"Audio\",\"AudioCodec\":\"wav\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"opus\",\"Type\":\"Audio\",\"AudioCodec\":\"opus\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"wav\",\"Type\":\"Audio\",\"AudioCodec\":\"wav\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"}],\"ContainerProfiles\":[],\"CodecProfiles\":[{\"Type\":\"VideoAudio\",\"Codec\":\"aac\",\"Conditions\":[{\"Condition\":\"NotEquals\",\"Property\":\"AudioProfile\",\"Value\":\"HE-AAC\"},{\"Condition\":\"Equals\",\"Property\":\"IsSecondaryAudio\",\"Value\":\"false\",\"IsRequired\":false}]},{\"Type\":\"VideoAudio\",\"Conditions\":[{\"Condition\":\"Equals\",\"Property\":\"IsSecondaryAudio\",\"Value\":\"false\",\"IsRequired\":false}]},{\"Type\":\"Video\",\"Codec\":\"h264\",\"Conditions\":[{\"Condition\":\"NotEquals\",\"Property\":\"IsAnamorphic\",\"Value\":\"true\",\"IsRequired\":false},{\"Condition\":\"EqualsAny\",\"Property\":\"VideoProfile\",\"Value\":\"high|main|baseline|constrained baseline\",\"IsRequired\":false},{\"Condition\":\"LessThanEqual\",\"Property\":\"VideoLevel\",\"Value\":\"42\",\"IsRequired\":false}]}],\"SubtitleProfiles\":[{\"Format\":\"vtt\",\"Method\":\"External\"}],\"ResponseProfiles\":[{\"Type\":\"Video\",\"Container\":\"m4v\",\"MimeType\":\"video/mp4\"}],\"MaxStaticMusicBitrate\":320000}}";
 
 char* buf;
 char* acc_tok = NULL;
@@ -16,18 +19,20 @@ char* user_id = NULL;
 char device_id[128];
 size_t write_data(void *buffer, size_t size, size_t nmmemb, void *userp){
     char *str_buf = (char *)buffer;
-    //printf("%s\n", str_buf);
 
     char * temp_buf = malloc((nmmemb * sizeof(char)) + strlen(buf) + 1);
-    // printf("%s\n\n", buf);
-    // printf("%ld\n", (nmmemb * sizeof(char)) + strlen(buf) + 1);
-    // printf("%ld\n", strlen(str_buf));
     strcpy(temp_buf, buf);
     strcat(temp_buf, str_buf);
-    // printf("%s\n\n", buf);
 
     free(buf);
     buf = temp_buf;
+
+    
+    return size*nmmemb;
+}
+
+size_t write_data_temp(void *buffer, size_t size, size_t nmmemb, void *userp){
+    printf("%s\n", (char *) buffer);
 
     
     return size*nmmemb;
@@ -70,27 +75,44 @@ char * constr_x_emby_auth_str(){
     return str;
 }
 
+char * constr_x_emby_auth_str_tok(){
+    char* str;
+    int len = 0;
+    len += strlen(JELLYAC_CLIENT);
+    len += strlen(JELLYAC_DEVICE);
+    len += strlen(JELLYAC_VERSION);
+    len += strlen(device_id);
+    len += strlen(acc_tok);
+    len += 92; //Rest of string
+    printf("%s, %d\n", acc_tok, len);
+    str = malloc(len * sizeof(char));
+    int d = sprintf(str, "X-Emby-Authorization: MediaBrowser Client=\"%s\", Device=\"%s\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"", JELLYAC_CLIENT, JELLYAC_DEVICE, device_id, 
+    JELLYAC_VERSION, acc_tok);
+    //printf("%d\n", d);
+    return str;
+}
+
 int initial_jellyfin_auth(){
-    CURL *curl;
+    CURL *curl_auth, *curl_full;
     CURLcode res;
 
     //
-    curl = curl_easy_init();
-    if(curl){
+    curl_auth = curl_easy_init();
+    if(curl_auth){
         struct curl_slist *chunk = NULL;
         chunk = curl_slist_append(chunk, "Accept:");
         char * x_emb_auth_str = constr_x_emby_auth_str();
         chunk = curl_slist_append(chunk, x_emb_auth_str);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.15:8096/Users/authenticatebyname");
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "{\"Username\": \"jellyfin\", \"pw\": \"\"}");
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
-        res = curl_easy_perform(curl);
+        curl_easy_setopt(curl_auth, CURLOPT_URL, "http://192.168.1.15:8096/Users/authenticatebyname");
+        curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, "{\"Username\": \"jellyfin\", \"pw\": \"\"}");
+        curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, write_data);
+        curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
+        res = curl_easy_perform(curl_auth);
         if(res != CURLE_OK){
             printf("ERROR\n");
         }
-        curl_easy_cleanup(curl);
+        curl_easy_cleanup(curl_auth);
         curl_slist_free_all(chunk);
         free(x_emb_auth_str);
     }
@@ -113,7 +135,31 @@ int main(int argc, char const *argv[])
     printf("%s\n", acc_tok);
     printf("%s\n", user_id);
     printf("%s\n", device_id);
+
+    CURL *curl_full = curl_easy_init();
+    CURLcode res;
+    if(curl_full){
+        struct curl_slist *chunk = NULL;
+        chunk = curl_slist_append(chunk, "Accept:");
+        char * x_emb_auth_str = constr_x_emby_auth_str_tok();
+        chunk = curl_slist_append(chunk, x_emb_auth_str);
+        chunk = curl_slist_append(chunk, "Content-Type: application/json");
+        curl_easy_setopt(curl_full, CURLOPT_URL, "http://192.168.1.15:8096/Sessions/Capabilities/Full");
+        curl_easy_setopt(curl_full, CURLOPT_POSTFIELDS, full_json_str);
+        curl_easy_setopt(curl_full, CURLOPT_WRITEFUNCTION, write_data_temp);
+        curl_easy_setopt(curl_full, CURLOPT_HTTPHEADER, chunk);
+        res = curl_easy_perform(curl_full);
+        if(res != CURLE_OK){
+            printf("ERROR\n");
+        }
+        curl_easy_cleanup(curl_full);
+        curl_slist_free_all(chunk);
+        free(x_emb_auth_str);
+    }
+
+
     curl_global_cleanup();
     free(buf);
+    init_ws_conn();
     return 0;
 }
