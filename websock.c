@@ -97,6 +97,19 @@ static int callback_example( struct lws *wsi, enum lws_callback_reasons reason, 
 						}
 					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "ToggleMute", 10)){
 						toggle_mute();
+					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetRepeatMode", 13)){
+						char args = 0;
+						for(; i < r; i++){
+							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Arguments", 9)){
+								args = 1;
+							} else if(args && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "RepeatMode", 10)){
+								if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "RepeatAll", 9)){
+									set_repeat_all();
+								} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "RepeatNone", 10)){
+									set_repeat_none();
+								} 
+							}
+						}
 					}
 				}
 			}

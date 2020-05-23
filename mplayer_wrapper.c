@@ -114,6 +114,10 @@ void* start_mplayer(void* playlist_loc_void){
         } else {
             q_elt = q_elt->next;
         }
+
+        if(!q_elt && state.repeat){
+            q_elt = q.head;
+        }
     }
     pthread_mutex_lock(&run_mutex);
     mplayer_running = 0;
@@ -452,4 +456,16 @@ void toggle_mute(){
     free(s);
     pthread_mutex_unlock(&fifo_control_mutex);
     inform_progress_update(state);
+}
+
+void set_repeat_all(){
+    pthread_mutex_lock(&state_mutex);
+    state.repeat = 1;
+    pthread_mutex_unlock(&state_mutex);
+}
+
+void set_repeat_none(){
+    pthread_mutex_lock(&state_mutex);
+    state.repeat = 0;
+    pthread_mutex_unlock(&state_mutex);
 }

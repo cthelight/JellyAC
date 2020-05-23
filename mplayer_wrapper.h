@@ -44,4 +44,6 @@ double get_vol_level();
 void set_time_pos(double sec);
 void set_vol_level(double lvl);
 void toggle_mute();
+void set_repeat_none();
+void set_repeat_all();
 #endif
