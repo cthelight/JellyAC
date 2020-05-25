@@ -2,10 +2,20 @@
 #include <pthread.h>
 #include <time.h>
 
+#define CF_CAP_BASE "http://%s/Sessions/Capabilities/Full" //String is server
+#define CF_INIT_PLAY_BASE "http://%s/Sessions/Playing" //String is server
+#define CF_PROG_BASE "http://%s/Sessions/Playing/Progress" //String is server
+#define CF_STOP_BASE "http://%s/Sessions/Playing/Stopped" //String is server
+#define CF_AUTH_BASE "http://%s/Users/authenticatebyname" //String is server
+#define CF_AUTH_POST_BASE "{\"Username\": \"%s\", \"pw\": \"%s\"}" //String is username, then password
+
 extern char * user_id;
 extern char * acc_tok;
 extern char device_id[128];
 extern char *buf;
+extern const char *user;
+extern const char *server_addr;
+extern const char *pass;
 
 extern pthread_mutex_t prog_mutex;
 
@@ -119,18 +129,46 @@ size_t write_data(void *buffer, size_t size, size_t nmmemb, void *userp){
 }
 
 size_t dump_data(void *buffer, size_t size, size_t nmmemb, void *userp){
-    printf("DUMP: %s\n", (char *)buffer);
-    
+    //Dont care about response
     return size*nmmemb;
+}
+
+int inform_capability(){
+    CURL *curl_full = curl_easy_init();
+    CURLcode res;
+    if(curl_full){
+        struct curl_slist *chunk = NULL;
+        chunk = curl_slist_append(chunk, "Accept:");
+        char * x_emb_auth_str = constr_x_emby_auth_str_tok();
+        chunk = curl_slist_append(chunk, x_emb_auth_str);
+        chunk = curl_slist_append(chunk, "Content-Type: application/json");
+        //construct addr string
+        char * ser_url;
+        int len = snprintf(NULL, 0, CF_CAP_BASE, server_addr);
+        ser_url = malloc((len + 1) * sizeof(char));
+        sprintf(ser_url, CF_CAP_BASE, server_addr);
+    
+        curl_easy_setopt(curl_full, CURLOPT_URL, ser_url);
+        curl_easy_setopt(curl_full, CURLOPT_POSTFIELDS, full_json_str);
+        curl_easy_setopt(curl_full, CURLOPT_WRITEFUNCTION, dump_data);
+        curl_easy_setopt(curl_full, CURLOPT_HTTPHEADER, chunk);
+        res = curl_easy_perform(curl_full);
+        if(res != CURLE_OK){
+            printf("ERROR\n");
+        }
+        curl_easy_cleanup(curl_full);
+        curl_slist_free_all(chunk);
+        free(x_emb_auth_str);
+        free(ser_url);
+    }
+
 }
 
 int inform_initial_playing(char * id, char *name, MQ_t *q){
     CURL *curl_auth, *curl_full;
     CURLcode res;
     char * s = constr_initial_playing(id, name, q);
-    printf("DUMP: %s\n", s);
-    //free(s);
-    //
+
     curl_auth = curl_easy_init();
     if(curl_auth){
         struct curl_slist *chunk = NULL;
@@ -138,7 +176,13 @@ int inform_initial_playing(char * id, char *name, MQ_t *q){
         char * x_emb_auth_str = constr_x_emby_auth_str_tok();
         chunk = curl_slist_append(chunk, x_emb_auth_str);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl_auth, CURLOPT_URL, "http://192.168.1.3:8096/Sessions/Playing");
+        //construct addr string
+        char * ser_url;
+        int len = snprintf(NULL, 0, CF_INIT_PLAY_BASE, server_addr);
+        ser_url = malloc((len + 1) * sizeof(char));
+        sprintf(ser_url, CF_INIT_PLAY_BASE, server_addr);
+
+        curl_easy_setopt(curl_auth, CURLOPT_URL, ser_url);
         curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, s);
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, dump_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
@@ -149,8 +193,10 @@ int inform_initial_playing(char * id, char *name, MQ_t *q){
         curl_easy_cleanup(curl_auth);
         curl_slist_free_all(chunk);
         free(x_emb_auth_str);
-        free(s);
+        free(ser_url);
+        
     }
+    free(s);
     return 4;
 }
 
@@ -160,9 +206,7 @@ int inform_progress_update(mp_state_t state){
     CURL *curl_auth, *curl_full;
     CURLcode res;
     char * s = constr_progress_update(state);
-    printf("%s\n", s);
-    //free(s);
-    //
+
     curl_auth = curl_easy_init();
     if(curl_auth){
         struct curl_slist *chunk = NULL;
@@ -170,7 +214,13 @@ int inform_progress_update(mp_state_t state){
         char * x_emb_auth_str = constr_x_emby_auth_str_tok();
         chunk = curl_slist_append(chunk, x_emb_auth_str);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl_auth, CURLOPT_URL, "http://192.168.1.3:8096/Sessions/Playing/Progress");
+        //construct addr string
+        char * ser_url;
+        int len = snprintf(NULL, 0, CF_PROG_BASE, server_addr);
+        ser_url = malloc((len + 1) * sizeof(char));
+        sprintf(ser_url, CF_PROG_BASE, server_addr);
+
+        curl_easy_setopt(curl_auth, CURLOPT_URL, ser_url);
         curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, s);
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, dump_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
@@ -181,8 +231,9 @@ int inform_progress_update(mp_state_t state){
         curl_easy_cleanup(curl_auth);
         curl_slist_free_all(chunk);
         free(x_emb_auth_str);
-        free(s);
+        free(ser_url);
     }
+    free(s);
     pthread_mutex_unlock(&prog_mutex);
     return 4;
 }
@@ -193,9 +244,7 @@ int inform_stopped(mp_state_t state){
     CURL *curl_auth, *curl_full;
     CURLcode res;
     char * s = constr_progress_update(state);
-    printf("%s\n", s);
-    //free(s);
-    //
+
     curl_auth = curl_easy_init();
     if(curl_auth){
         struct curl_slist *chunk = NULL;
@@ -203,7 +252,13 @@ int inform_stopped(mp_state_t state){
         char * x_emb_auth_str = constr_x_emby_auth_str_tok();
         chunk = curl_slist_append(chunk, x_emb_auth_str);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl_auth, CURLOPT_URL, "http://192.168.1.3:8096/Sessions/Playing/Stopped");
+        //construct addr string
+        char * ser_url;
+        int len = snprintf(NULL, 0, CF_STOP_BASE, server_addr);
+        ser_url = malloc((len + 1) * sizeof(char));
+        sprintf(ser_url, CF_STOP_BASE, server_addr);
+
+        curl_easy_setopt(curl_auth, CURLOPT_URL, ser_url);
         curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, s);
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, dump_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
@@ -214,8 +269,9 @@ int inform_stopped(mp_state_t state){
         curl_easy_cleanup(curl_auth);
         curl_slist_free_all(chunk);
         free(x_emb_auth_str);
-        free(s);
+        free(ser_url);
     }
+    free(s);
     pthread_mutex_unlock(&prog_mutex);
     return 4;
 }
@@ -244,11 +300,11 @@ char * constr_x_emby_auth_str_tok(){
     len += strlen(device_id);
     len += strlen(acc_tok);
     len += 92; //Rest of string
-    printf("%s, %d\n", acc_tok, len);
+
     str = malloc(len * sizeof(char));
     int d = sprintf(str, "X-Emby-Authorization: MediaBrowser Client=\"%s\", Device=\"%s\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"", JELLYAC_CLIENT, JELLYAC_DEVICE, device_id, 
     JELLYAC_VERSION, acc_tok);
-    //printf("%d\n", d);
+
     return str;
 }
 
@@ -264,7 +320,19 @@ int initial_jellyfin_auth(){
         char * x_emb_auth_str = constr_x_emby_auth_str();
         chunk = curl_slist_append(chunk, x_emb_auth_str);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl_auth, CURLOPT_URL, "http://192.168.1.3:8096/Users/authenticatebyname");
+        //construct addr string
+        char * ser_url;
+        int len = snprintf(NULL, 0, CF_AUTH_BASE, server_addr);
+        ser_url = malloc((len + 1) * sizeof(char));
+        sprintf(ser_url, CF_AUTH_BASE, server_addr);
+
+        curl_easy_setopt(curl_auth, CURLOPT_URL, ser_url);
+
+        char * cred;
+        int cred_len = snprintf(NULL, 0, CF_AUTH_POST_BASE, server_addr);
+        cred = malloc((cred_len + 1) * sizeof(char));
+        sprintf(cred, CF_AUTH_POST_BASE, user, pass);
+
         curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, "{\"Username\": \"jellyfin\", \"pw\": \"\"}");
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, write_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
@@ -275,6 +343,8 @@ int initial_jellyfin_auth(){
         curl_easy_cleanup(curl_auth);
         curl_slist_free_all(chunk);
         free(x_emb_auth_str);
+        free(ser_url);
+        free(cred);
     }
     return 4;
 }
@@ -285,11 +355,6 @@ void *send_progress(void *vd_state){
     mp_state_t * state = (mp_state_t *)vd_state;
     while(!state->stopped && (!(state->item) || !mp_fifo)){
         //until something is played, wait
-        printf("STUCK\n");
-        if(!state->item){
-            printf("item NULL\n");
-        }
-        printf("%d\n", mp_fifo);
         sleep(1);
     }
     while(!(state->stopped)){

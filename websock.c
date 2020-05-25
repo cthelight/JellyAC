@@ -14,7 +14,10 @@ extern char* acc_tok;
 extern char* user_id;
 extern char device_id[128];
 
-static int callback_example( struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len )
+extern char ip[1024];
+extern int port;
+
+static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len )
 {
 	switch( reason )
 	{
@@ -23,8 +26,7 @@ static int callback_example( struct lws *wsi, enum lws_callback_reasons reason, 
 			break;
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
-            //printf("Hello\n");
-            printf("RX: %s\n", (char *)in);
+		;
 			char * buf = (char *)in;
 			jsmn_parser p;
 			jsmntok_t *t;
@@ -45,7 +47,6 @@ static int callback_example( struct lws *wsi, enum lws_callback_reasons reason, 
 						for(j = i + 2; j < r; j++){
 							if(t[j].type = JSMN_STRING && !strncmp(buf + t[j].start, "StartIndex", 10)){
 								char * s = strndup(buf + t[j + 1].start, t[j + 1].end - t[j + 1].start);
-								printf("%s\n", s);
 								d = atoi(s);
 								free(s);
 							}
@@ -150,7 +151,7 @@ static struct lws_protocols protocols[] =
 {
 	{
 		"example-protocol",
-		callback_example,
+		handle_callback,
 		0,
 		EXAMPLE_RX_BUFFER_BYTES,
 	},
@@ -173,6 +174,7 @@ char * get_socket_path(){
 
 int init_ws_conn()
 {
+	lws_set_log_level(0, NULL);
 	struct lws_context_creation_info info;
 	memset( &info, 0, sizeof(info) );
 
@@ -182,7 +184,7 @@ int init_ws_conn()
 	info.uid = -1;
 
 	struct lws_context *context = lws_create_context( &info );
-
+	
 	time_t old = 0;
 	while( 1 )
 	{
@@ -194,8 +196,8 @@ int init_ws_conn()
 		{
 			struct lws_client_connect_info ccinfo = {0};
 			ccinfo.context = context;
-			ccinfo.address = "192.168.1.3";
-			ccinfo.port = 8096;
+			ccinfo.address = ip;
+			ccinfo.port = port;
 			char * path = get_socket_path();
 			ccinfo.path = path;
 			ccinfo.host = lws_canonical_hostname( context );

@@ -2,9 +2,12 @@
 #include "curl_func.h"
 #include "music_queue.h"
 #include <time.h>
+#include <unistd.h>
 #define MPLAYER_FIFO "/tmp/mplayer_input"
 #define PLAYLIST_LOC "/tmp/playlist.txt"
 #define MPLAYER_OUTPUT_FIFO "/tmp/mplayer_output"
+//Server, songid, Userid, deviceid, API-key
+#define MPW_HTTP_LOC_BASE "http://%s/Audio/%s/universal?UserId=\"%s\"&DeviceId=\"%s\"&MaxStreamingBitrate=140000000&Container=opus%%2Cmp3%%7Cmp3%%2Cflac%%2Cwebma%%2Cwebm%%2Cwav%%2Cogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac&api_key=\"%s\""
 
 pthread_t fifo_control_thread;
 pthread_mutex_t fifo_control_mutex;
@@ -12,6 +15,8 @@ pthread_t fifo_output_thread;
 pthread_mutex_t fifo_output_mutex;
 pthread_t mplayer_thread;
 pthread_mutex_t run_mutex;
+
+pthread_mutex_t play_mutex;
 
 pthread_t curl_prog_upd_thread;
 pthread_mutex_t state_mutex;
@@ -25,6 +30,7 @@ int mp_fifo, mp_out_fifo;
 extern char * user_id;
 extern char * acc_tok;
 extern char device_id[128];
+extern const char *server_addr;
 
 MQ_t q;
 MQ_elt_t *q_elt;
@@ -45,15 +51,12 @@ void mplayer_wrapper_init(){
     pthread_mutex_init(&read_prop_mutex, NULL);
     pthread_mutex_init(&state_mutex, NULL);
     pthread_mutex_init(&prog_mutex, NULL);
+    pthread_mutex_init(&play_mutex, NULL);
     pthread_create(&fifo_control_thread, NULL, open_control_fifo, NULL);
     pthread_create(&fifo_output_thread, NULL, open_output_fifo, NULL);
 }
 
 void* start_mplayer(void* playlist_loc_void){
-    pthread_mutex_lock(&run_mutex);
-    mplayer_running = 1;
-    pthread_mutex_unlock(&run_mutex);
-
     pthread_mutex_lock(&state_mutex);
     state.stopped = 0;
     stopped = 0;
@@ -61,9 +64,7 @@ void* start_mplayer(void* playlist_loc_void){
 
     //open_fifo(NULL);
     while(q_elt && !stopped){
-        printf("PLAYING\n");
         pthread_mutex_lock(&state_mutex);
-        printf("PLAYING\n");
         state.item = q_elt->ID;
         state.playlist_item_name = q_elt->name;
         state.pos = 0;
@@ -82,7 +83,7 @@ void* start_mplayer(void* playlist_loc_void){
         inform_progress_update(state);
 
         int len = 1;
-        len += strlen("mplayer -quiet -slave -prefer-ipv4 -nolirc -cache 1024 -cache-min 80 -input file=\"\" \"\" > \"\"");
+        len += strlen("mplayer -quiet -slave -prefer-ipv4 -nolirc -cache 1024 -cache-min 80 -input file=\"\" \"\" > \"\" 2> /dev/null");
         len += strlen(q_elt->play_loc);
         len += strlen(MPLAYER_FIFO);
         len += strlen(MPLAYER_OUTPUT_FIFO);
@@ -93,12 +94,9 @@ void* start_mplayer(void* playlist_loc_void){
         strcat(call_str, q_elt->play_loc);
         strcat(call_str, "\" > \"");
         strcat(call_str, MPLAYER_OUTPUT_FIFO);
-        strcat(call_str, "\"");
-        //printf("%s\n", call_str);
-        //string callstring = string("mplayer -really-quiet -slave -input file=\"" + fifo_str + "\" -playlist \"" + string(PLAYLIST_LOC) + "\"");
-        //cout << playlist_loc << endl;
-        //cout << fifo_str << endl;
+        strcat(call_str, "\" 2> /dev/null");
         
+        //sleep(10);
         system(call_str);
         if(play_prev && !go_back){
             play_prev = 0;
@@ -129,7 +127,6 @@ void* start_mplayer(void* playlist_loc_void){
 void *open_control_fifo(void * v){
     mkfifo(MPLAYER_FIFO,S_IRWXU+S_IRWXG + S_IRWXO);
     mp_fifo = open(MPLAYER_FIFO, O_WRONLY);
-    //printf("%d\n", mp_fifo);
     return NULL;
 }
 
@@ -137,31 +134,17 @@ void *open_output_fifo(void * v){
     mkfifo(MPLAYER_OUTPUT_FIFO,S_IRWXU+S_IRWXG + S_IRWXO);
     mp_out_fifo = open(MPLAYER_OUTPUT_FIFO, O_RDONLY);
     fcntl(mp_out_fifo, F_SETFL, O_NONBLOCK);
-    //printf("%d\n", mp_fifo);
     return NULL;
 }
 
 char *constr_http_loc(char *str, int start, int end){
-    int len = 1;
-    len += strlen("http://192.168.1.3:8096/Audio//universal?UserId=\"\"&DeviceId=\"\"&MaxStreamingBitrate=140000000&Container=opus%2Cmp3%7Cmp3%2Cflac%2Cwebma%2Cwebm%2Cwav%2Cogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac&api_key=\"\"");
+    char * song_id = strndup(str + start, end - start);
+    int len = snprintf(NULL, 0, MPW_HTTP_LOC_BASE, server_addr, song_id, user_id, device_id, acc_tok);
+    char * http_loc = malloc((len + 1) * sizeof(char));
+    sprintf(http_loc, MPW_HTTP_LOC_BASE, server_addr, song_id, user_id, device_id, acc_tok);
+    free(song_id);
 
-    len += strlen(user_id);
-    len += strlen(device_id);
-    len += end - start;
-    len += strlen(acc_tok);
-    char * loc = malloc(len * sizeof(char));
-    strcpy(loc, "http://192.168.1.3:8096/Audio/");
-    //strcat(loc, user_id);
-    //strcat(loc, "/Items/");
-    strncat(loc, str + start, end - start);
-    strcat(loc, "/universal?UserId=");
-    strcat(loc, user_id);
-    strcat(loc, "&DeviceId=");
-    strcat(loc, device_id);
-    strcat(loc, "&MaxStreamingBitrate=140000000&Container=opus%2Cmp3%7Cmp3%2Cflac%2Cwebma%2Cwebm%2Cwav%2Cogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac&api_key=");
-    strcat(loc, acc_tok);
-    strcat(loc, "");
-    return loc;
+    return http_loc;
 }
 
 
@@ -176,44 +159,14 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
         pthread_mutex_unlock(&run_mutex);
     }
     MQ_empty(&q);
-
-    // FILE *fp;
-    // fp = fopen(PLAYLIST_LOC, "w");
-    // int i;
-    // int st, en;
-    // for(i = 0; i < num_tok; i++){
-    //     if(t[i].type == JSMN_STRING && !strncmp(str + t[i].start, "ItemIds", 7)){
-    //         printf("%.*s\n", t[i + 1].end - t[i + 1].start, str + t[i + 1].start);
-    //         int j;
-    //         for(j = 0; j < t[i + 1].size; j++){
-    //             if(j == 0){
-    //                 st = t[i + j + 2].start;
-    //                 en = t[i + j + 2].end;
-    //             }
-    //             //printf("%.*s\n", t[i + j + 2].end - t[i + j + 2].start, str + t[i + j + 2].start);
-    //             char* s = constr_http_loc(str, t[i + j + 2].start, t[i + j + 2].end);
-    //             //printf("%s\n", s);
-    //             fprintf(fp, "%s\n", s);
-    //             free(s);
-    //         }
-    //     }
-    // }
-    // fclose(fp);
-
     int i;
     for(i = 0; i < num_tok; i++){
         if(t[i].type == JSMN_STRING && !strncmp(str + t[i].start, "ItemIds", 7)){
-            printf("%.*s\n", t[i + 1].end - t[i + 1].start, str + t[i + 1].start);
             int j;
             for(j = 0; j < t[i + 1].size; j++){
                 char *song_id = malloc(t[i + j + 2].end - t[i + j + 2].start + 1);
                 sprintf(song_id, "%.*s", t[i + j + 2].end - t[i + j + 2].start, str + t[i + j + 2].start);
-                //strncpy(song_id, str + t[i + j + 2].start, t[i + j + 2].end - t[i + j + 2].start);
-                //printf("%.*s\n", t[i + j + 2].end - t[i + j + 2].start, str + t[i + j + 2].start);
                 char* s = constr_http_loc(str, t[i + j + 2].start, t[i + j + 2].end);
-                //printf("%s\n", s);
-                //fprintf(fp, "%s\n", s);
-                //free(s);
                 int len = snprintf(NULL, 0, "playlistitem%d", j);
                 char* name = malloc((len + 1) * sizeof(char));
                 sprintf(name, "playlistitem%d", j);
@@ -235,22 +188,18 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     q_elt = q.head;
     int idx = 0;
     while(idx < start_idx && q_elt->next){
-        printf("HELLO %d\n", idx);
         q_elt = q_elt->next;
         idx++;
     }
-
+    pthread_mutex_lock(&run_mutex);
+    mplayer_running = 1;
+    pthread_mutex_unlock(&run_mutex);
     pthread_create(&mplayer_thread, NULL, start_mplayer, NULL);
     
     //Send initial playing info via curl.
     inform_initial_playing(q_elt->ID, q_elt->name, &q);
     
     pthread_create(&curl_prog_upd_thread, NULL, send_progress, (void *)&state);
-
-    //inform_progress_update(q.head->ID, q_elt->name);
-    printf("DUMP\n");
-    MQ_print(&q);
-    //start_mplayer(NULL);
     return 0;
 }
 
@@ -262,7 +211,6 @@ int toggle_pause(){
     pthread_mutex_unlock(&state_mutex);
     pthread_mutex_unlock(&fifo_control_mutex);
     inform_progress_update(state);
-    //mplayer_fifo.close();
     return 0;
 }
 
@@ -296,7 +244,12 @@ int stop(){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo,"pausing_keep quit\n", 18);
     pthread_mutex_unlock(&fifo_control_mutex);
-    pthread_join(mplayer_thread, NULL);
+    while(mplayer_running){
+        pthread_mutex_lock(&fifo_control_mutex);
+        write(mp_fifo,"pausing_keep quit\n", 18);
+        pthread_mutex_unlock(&fifo_control_mutex);
+        usleep(100000);
+    }
     inform_stopped(state);
     return 0;
 }
@@ -305,9 +258,6 @@ int quit(){
     stop();
     pthread_join(mplayer_thread, NULL);
     close(mp_fifo);
-    pthread_mutex_lock(&run_mutex);
-    mplayer_running = 0;
-    pthread_mutex_unlock(&run_mutex);
     return 0;
 }
 
@@ -334,6 +284,9 @@ int match_line_int(char * pattern, int *d){
         *cur = c;
         cur ++;
     }
+    *cur = '\n';
+    cur++;
+    *cur = '\0';
     fcntl(mp_out_fifo, F_SETFL, O_NONBLOCK);
     pthread_mutex_unlock(&fifo_output_mutex);
     //printf("BLAH: %s\n", buf);
@@ -352,6 +305,10 @@ double match_line_doub(char * pattern, double *d){
         *cur = c;
         cur ++;
     }
+    *cur = '\n';
+    cur++;
+    *cur = '\0';
+
     fcntl(mp_out_fifo, F_SETFL, O_NONBLOCK);
     pthread_mutex_unlock(&fifo_output_mutex);
     //printf("BLAH: %s\n", buf);
@@ -371,7 +328,6 @@ int get_percent_pos(){
         pthread_mutex_unlock(&fifo_control_mutex);
     }
     pthread_mutex_unlock(&read_prop_mutex);
-    printf("FINISHED\n");
     return d;
 }
 

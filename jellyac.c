@@ -8,17 +8,16 @@
 char* buf;
 char* acc_tok = NULL;
 char* user_id = NULL;
+const char* server_addr = NULL;
 char device_id[128];
 extern const char * full_json_str;
-size_t write_data_temp(void *buffer, size_t size, size_t nmmemb, void *userp){
-    printf("%s\n", (char *) buffer);
+const char *user = NULL;
+const char *pass = NULL;
 
-    
-    return size*nmmemb;
-}
+char ip[1024]; //Assume shorter than 1024;
+int port;
 
 int json_parse_id(){
-    printf("%s\n", buf);
     jsmn_parser p;
     jsmntok_t *t;
     jsmn_init(&p);
@@ -46,7 +45,30 @@ int json_parse_id(){
 
 int main(int argc, char const *argv[])
 {
-    mplayer_wrapper_init();
+    if(argc < 2){
+        printf("Not Enough Arguments\n");
+    }
+    server_addr = argv[1];
+    user = argv[2];
+    if(argc >= 3){
+        pass = argv[3];
+    } else {
+        //allow for empty password. MUST BE LAST ARGUMENT
+        pass = "";
+    }
+
+    //Split address into ip and port
+    char *c = (char *)server_addr;
+    int idx = 0;
+    while(*c != ':'){
+        ip[idx] = *c;
+        c++;
+        idx++;
+    }
+    ip[idx] = '\0';
+    c++;
+    port = atoi(c);
+
     //make buf a valid pointer for freeing
     buf = malloc(2 *sizeof(char));
     *buf = '\0';
@@ -58,36 +80,11 @@ int main(int argc, char const *argv[])
     curl_global_init(CURL_GLOBAL_ALL);
     initial_jellyfin_auth();
     json_parse_id();
-    printf("%s\n", acc_tok);
-    printf("%s\n", user_id);
-    printf("%s\n", device_id);
-
-    CURL *curl_full = curl_easy_init();
-    CURLcode res;
-    if(curl_full){
-        struct curl_slist *chunk = NULL;
-        chunk = curl_slist_append(chunk, "Accept:");
-        char * x_emb_auth_str = constr_x_emby_auth_str_tok();
-        chunk = curl_slist_append(chunk, x_emb_auth_str);
-        chunk = curl_slist_append(chunk, "Content-Type: application/json");
-        curl_easy_setopt(curl_full, CURLOPT_URL, "http://192.168.1.3:8096/Sessions/Capabilities/Full");
-        curl_easy_setopt(curl_full, CURLOPT_POSTFIELDS, full_json_str);
-        curl_easy_setopt(curl_full, CURLOPT_WRITEFUNCTION, write_data_temp);
-        curl_easy_setopt(curl_full, CURLOPT_HTTPHEADER, chunk);
-        res = curl_easy_perform(curl_full);
-        if(res != CURLE_OK){
-            printf("ERROR\n");
-        }
-        curl_easy_cleanup(curl_full);
-        curl_slist_free_all(chunk);
-        free(x_emb_auth_str);
-    }
-
-
-    curl_global_cleanup();
+ 
+    inform_capability();
     free(buf);
-    //start_mplayer(NULL);
-    printf("HELLO\n");
+    mplayer_wrapper_init();
     init_ws_conn();
+    curl_global_cleanup();
     return 0;
 }

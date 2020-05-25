@@ -12,4 +12,5 @@ int inform_initial_playing(char * id, char *name, MQ_t *q);
 int inform_progress_update(mp_state_t state);
 void *send_progress(void *vd_state);
 int inform_stopped(mp_state_t state);
+int inform_capability();
 #endif
