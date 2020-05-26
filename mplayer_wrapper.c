@@ -202,6 +202,7 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     inform_initial_playing(q_elt->ID, q_elt->name, &q);
     
     pthread_create(&curl_prog_upd_thread, NULL, send_progress, (void *)&state);
+    printf("HELLO\n");
     return 0;
 }
 
