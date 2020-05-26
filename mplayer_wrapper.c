@@ -95,7 +95,7 @@ void* start_mplayer(void* playlist_loc_void){
         strcat(call_str, "\" > \"");
         strcat(call_str, MPLAYER_OUTPUT_FIFO);
         strcat(call_str, "\" 2> /dev/null");
-        
+        printf("HELLO\n");
         //sleep(10);
         system(call_str);
         if(play_prev && !go_back){
