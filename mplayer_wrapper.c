@@ -57,6 +57,7 @@ void mplayer_wrapper_init(){
 }
 
 void* start_mplayer(void* playlist_loc_void){
+    printf("HELLO\n");
     pthread_mutex_lock(&state_mutex);
     state.stopped = 0;
     stopped = 0;
