@@ -57,7 +57,6 @@ void mplayer_wrapper_init(){
 }
 
 void* start_mplayer(void* playlist_loc_void){
-    printf("HELLO\n");
     pthread_mutex_lock(&state_mutex);
     state.stopped = 0;
     stopped = 0;
@@ -96,7 +95,6 @@ void* start_mplayer(void* playlist_loc_void){
         strcat(call_str, "\" > \"");
         strcat(call_str, MPLAYER_OUTPUT_FIFO);
         strcat(call_str, "\" 2> /dev/null");
-        printf("HELLO\n");
         //sleep(10);
         system(call_str);
         if(play_prev && !go_back){
@@ -188,7 +186,6 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     pthread_mutex_unlock(&state_mutex);
     q_elt = q.head;
     int idx = 0;
-    printf("HELLO\n");
     while(idx < start_idx && q_elt->next){
         q_elt = q_elt->next;
         idx++;
@@ -202,7 +199,6 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     inform_initial_playing(q_elt->ID, q_elt->name, &q);
     
     pthread_create(&curl_prog_upd_thread, NULL, send_progress, (void *)&state);
-    printf("HELLO\n");
     return 0;
 }
 

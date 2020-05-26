@@ -27,7 +27,6 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 		;
-			printf("HELLO\n");
 			char * buf = (char *)in;
 			jsmn_parser p;
 			jsmntok_t *t;
@@ -39,7 +38,6 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 			int i;
 			char play_state = 0;
 			char gen_cmd = 0;
-			printf("HELLO\n");
 			for(i = 0; i < r; i++){
 				if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "PlayCommand", 11)){
 					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayNow", 7)){
@@ -53,7 +51,6 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 								free(s);
 							}
 						}
-						printf("HELLO\n");
 						play_playlist(buf, t, r, d);
 					}
 				} else if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "MessageType", 11)){
