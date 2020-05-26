@@ -36,7 +36,7 @@ void MQ_add(MQ_t *q, char *id, char *play_loc, char *name){
 void MQ_remove(MQ_t *q, int pos){
     MQ_elt_t *cur = q->head;
     int i;
-    for(i = 0; i < pos, cur; i++, cur = cur->next){
+    for(i = 0; i < pos && cur; i++, cur = cur->next){
         ;
     }
     if(cur){

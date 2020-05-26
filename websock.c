@@ -42,12 +42,12 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 			printf("HELLO\n");
 			for(i = 0; i < r; i++){
 				if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "PlayCommand", 11)){
-					if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayNow", 7)){
+					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayNow", 7)){
 						//First look for "StartIndex"
 						int j;
 						int d = 0;
 						for(j = i + 2; j < r; j++){
-							if(t[j].type = JSMN_STRING && !strncmp(buf + t[j].start, "StartIndex", 10)){
+							if(t[j].type == JSMN_STRING && !strncmp(buf + t[j].start, "StartIndex", 10)){
 								char * s = strndup(buf + t[j + 1].start, t[j + 1].end - t[j + 1].start);
 								d = atoi(s);
 								free(s);
@@ -57,9 +57,9 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 						play_playlist(buf, t, r, d);
 					}
 				} else if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "MessageType", 11)){
-					if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "Playstate", 9)){
+					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Playstate", 9)){
 						play_state = 1;
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "GeneralCommand", 14)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "GeneralCommand", 14)){
 						gen_cmd = 1;
 					}
 				}
@@ -69,13 +69,13 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 				if(play_state == 1 && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Command", 7)){
 					if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayPause", 9)){
 						toggle_pause();
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "NextTrack", 9)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "NextTrack", 9)){
 						next();
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "PreviousTrack", 13)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PreviousTrack", 13)){
 						prev();
-					}  else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "Stop", 4)){
+					}  else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Stop", 4)){
 						stop();
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "Seek", 4)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Seek", 4)){
 						for(; i < r; i++){
 							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "SeekPositionTicks", 17)){
 								char * s = strndup(buf + t[i + 1].start, t[i + 1].end - t[i + 1].start);
@@ -87,7 +87,7 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 						//set_time_pos()
 					}
 				} else if(gen_cmd == 1 && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Name", 4)){
-					if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetVolume", 9)){
+					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetVolume", 9)){
 						char args = 0;
 						for(; i < r; i++){
 							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Arguments", 9)){
@@ -99,9 +99,9 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 								free(s);
 							}
 						}
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "ToggleMute", 10)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "ToggleMute", 10)){
 						toggle_mute();
-					} else if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetRepeatMode", 13)){
+					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetRepeatMode", 13)){
 						char args = 0;
 						for(; i < r; i++){
 							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Arguments", 9)){

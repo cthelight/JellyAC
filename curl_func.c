@@ -82,9 +82,9 @@ char * constr_progress_update(mp_state_t state){
 
     char * base = "{\"VolumeLevel\":%.0f,\"IsMuted\":%s,\"IsPaused\":%s,\"RepeatMode\":\"%s\",\"MaxStreamingBitrate\":140000000,\"PositionTicks\":%.0f,\"PlaybackStartTimeTicks\":%d,\"BufferedRanges\":[{\"start\":0,\"end\":12800000}],\"PlayMethod\":\"Transcode\",\"PlaySessionId\":\"%d\",\"PlaylistItemId\":\"%s\",\"MediaSourceId\":\"%s\",\"CanSeek\":true,\"ItemId\":\"%s\", EventName: \"timeupdate\"}";
     //int tm = time(NULL);
-    int len = snprintf(NULL, 0, base, muted_state, paused_state, repeat_state, state.vol, state.pos, state.playback_start_ticks, state.play_sess_id, state.playlist_item_name, state.item, state.item);
+    int len = snprintf(NULL, 0, base, state.vol, muted_state, paused_state, repeat_state, state.pos, state.playback_start_ticks, state.play_sess_id, state.playlist_item_name, state.item, state.item);
     char * s = malloc((len + 1) * sizeof(char));
-    sprintf(s, base, muted_state, paused_state, repeat_state, state.vol, state.pos, state.playback_start_ticks, state.play_sess_id, state.playlist_item_name, state.item, state.item);
+    sprintf(s, base, state.vol, muted_state, paused_state, repeat_state, state.pos, state.playback_start_ticks, state.play_sess_id, state.playlist_item_name, state.item, state.item);
     return s;
 }
 
