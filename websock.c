@@ -64,7 +64,7 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 
 			for(i = 0; i < r; i++){
 				if(play_state == 1 && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Command", 7)){
-					if(t[i + 1].type = JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayPause", 9)){
+					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayPause", 9)){
 						toggle_pause();
 					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "NextTrack", 9)){
 						next();
