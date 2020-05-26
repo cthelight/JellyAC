@@ -187,6 +187,7 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     pthread_mutex_unlock(&state_mutex);
     q_elt = q.head;
     int idx = 0;
+    printf("HELLO\n");
     while(idx < start_idx && q_elt->next){
         q_elt = q_elt->next;
         idx++;
