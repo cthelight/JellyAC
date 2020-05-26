@@ -25,7 +25,13 @@ typedef struct {
     char paused;
     char stopped;
     char repeat;
+    int percent_pos;
     MQ_t q;
+
+    //Record times of updates
+    long vol_update_time;
+    long pos_update_time;
+    long perc_pos_update_time;
 } mp_state_t;
 void* start_mplayer(void *);
 void * open_control_fifo(void*);
