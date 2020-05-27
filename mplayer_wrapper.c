@@ -21,6 +21,7 @@ pthread_mutex_t play_mutex;
 
 pthread_t curl_prog_upd_thread;
 pthread_mutex_t state_mutex;
+pthread_mutex_t upd_time_mutex;
 
 pthread_mutex_t read_prop_mutex;
 
@@ -51,8 +52,14 @@ void* start_mplayer(void* playlist_loc_void){
     int len = snprintf(NULL, 0, MPW_CALL_BASE, MPLAYER_FIFO, MPLAYER_OUTPUT_FIFO);
     char * call_str = malloc((len + 1) * sizeof(char));
     sprintf(call_str, MPW_CALL_BASE, MPLAYER_FIFO, MPLAYER_OUTPUT_FIFO);
+    pthread_mutex_lock(&run_mutex);
+    mplayer_running = 1;
+    pthread_mutex_unlock(&run_mutex);
     system(call_str);
-    free(call_str);    
+    free(call_str);
+    pthread_mutex_lock(&run_mutex);
+    mplayer_running = 0;
+    pthread_mutex_unlock(&run_mutex);
 }
 
 void mplayer_wrapper_init(){
@@ -64,6 +71,7 @@ void mplayer_wrapper_init(){
     pthread_mutex_init(&state_mutex, NULL);
     pthread_mutex_init(&prog_mutex, NULL);
     pthread_mutex_init(&play_mutex, NULL);
+    pthread_mutex_init(&upd_time_mutex, NULL);
     pthread_create(&fifo_control_thread, NULL, open_control_fifo, NULL);
     pthread_create(&mplayer_thread, NULL, start_mplayer, NULL);
     pthread_create(&mplayer_output_thread, NULL, handle_mplayer_output, NULL);
@@ -222,7 +230,8 @@ void *handle_mplayer_output(void * unused){
     char buf[1024]; //Assume all shorter than 1024;
     char c = '\0';
     char * cur = buf;
-    while(1){
+    while(mplayer_running){
+        printf("NOPE\n");
         cur = buf;
         c = '\0';
         //pthread_mutex_lock(&fifo_output_mutex);
@@ -237,7 +246,6 @@ void *handle_mplayer_output(void * unused){
         int res_int;
         double res_doub;
         long time = get_time_ms();
-        //printf("%s\n", buf);
         if(sscanf(buf, "ANS_PERCENT_POSITION=%d\n", &res_int) == 1){
             pthread_mutex_lock(&state_mutex);
             state.percent_pos = res_int;
@@ -253,7 +261,7 @@ void *handle_mplayer_output(void * unused){
             state.vol = res_doub;
             state.vol_update_time = time;
             pthread_mutex_unlock(&state_mutex);
-        } else if(sscanf(buf, "EOF code: %d", &res_int) == 1 && res_int == 1){
+        } else if(sscanf(buf, "EOF code: %d\n", &res_int) == 1 && res_int == 1){
             //File Ended, move to next song if possible
             pthread_mutex_lock(&state_mutex);
             if(q_elt->next){
@@ -266,7 +274,6 @@ void *handle_mplayer_output(void * unused){
             }
         }
     }
-    //printf("BLAH: %s\n", buf);
 }
 
 
@@ -276,37 +283,38 @@ int get_percent_pos(){
     pthread_mutex_unlock(&fifo_control_mutex);
     int d = -1;
     long time = get_time_ms();
-    //pthread_mutex_lock(&state_mutex);
     while(!state.stopped && (state.perc_pos_update_time < time)){
-        //pthread_mutex_unlock(&state_mutex);
         pthread_mutex_lock(&fifo_control_mutex);
         write(mp_fifo, "pausing_keep get_percent_pos\n", 29);
         pthread_mutex_unlock(&fifo_control_mutex);
         usleep(100000);
-        //pthread_mutex_lock(&state_mutex);
     }
     d = state.percent_pos;
-    //pthread_mutex_unlock(&state_mutex);
     return d;
 }
 
-double get_time_pos(){
+
+//Bad hack to allow bypass of mutex lock when setting
+double get_time_pos_h(){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, "pausing_keep_force get_time_pos\n", 32);
     pthread_mutex_unlock(&fifo_control_mutex);
     long time = get_time_ms();
     double d = -1;
-    //pthread_mutex_lock(&state_mutex);
     while(!state.stopped && (state.pos_update_time < time)){
-        //pthread_mutex_unlock(&state_mutex);
         pthread_mutex_lock(&fifo_control_mutex);
         write(mp_fifo, "pausing_keep_force get_time_pos\n", 32);
         pthread_mutex_unlock(&fifo_control_mutex);
         usleep(100000);
-        //pthread_mutex_lock(&state_mutex);
     }
     d = state.pos;
-    //pthread_mutex_unlock(&state_mutex);
+    return d;
+}
+
+double get_time_pos(){
+    pthread_mutex_lock(&upd_time_mutex);
+    double d = get_time_pos_h();
+    pthread_mutex_unlock(&upd_time_mutex);
     return d;
 }
 
@@ -316,29 +324,37 @@ double get_vol_level(){
     pthread_mutex_unlock(&fifo_control_mutex);
     double d = -1;
     long time = get_time_ms();
-    //pthread_mutex_lock(&state_mutex);
-    while(!state.stopped && (state.vol_update_time <= time)){
-        //pthread_mutex_unlock(&state_mutex);
+    while(!state.stopped && (state.vol_update_time < time)){
         pthread_mutex_lock(&fifo_control_mutex);
         write(mp_fifo, "pausing_keep get_property volume\n", 33);
         pthread_mutex_unlock(&fifo_control_mutex);
         usleep(100000);
-        //pthread_mutex_lock(&state_mutex);
     }
     d = state.vol;
-    //pthread_mutex_unlock(&state_mutex);
     return d;
 }
 
 
 void set_time_pos(double sec){
+    pthread_mutex_lock(&upd_time_mutex);
+    double old_pos = state.pos;
+    state.pos = sec * 10000000;
+    inform_progress_update(state);
     int len = snprintf(NULL, 0, "pausing_keep set_property time_pos %f\n", sec);
     char * s = malloc((len + 1) * sizeof(char));
     sprintf(s, "pausing_keep set_property time_pos %f\n", sec);
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, s, strlen(s));
     pthread_mutex_unlock(&fifo_control_mutex);
+    long time = get_time_ms();
     free(s);
+    double res_doub;
+    double c;
+    //Wait until reported time is within 2sec of expected (avoids lag in update on remote control)
+    while(!state.stopped && !((c = get_time_pos_h()) - sec * 10000000 < 20000000 && sec * 10000000 - c < 20000000)){
+        usleep(100000);
+    }
+    pthread_mutex_unlock(&upd_time_mutex);
     get_time_pos();
     inform_progress_update(state);
 }
@@ -358,7 +374,6 @@ void set_vol_level(double lvl){
     pthread_mutex_lock(&state_mutex);
     state.vol = lvl;
     pthread_mutex_unlock(&state_mutex);
-    //get_vol_level();
     inform_progress_update(state);
 }
 
