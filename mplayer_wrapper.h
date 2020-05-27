@@ -34,7 +34,6 @@ typedef struct {
     long perc_pos_update_time;
 } mp_state_t;
 void* start_mplayer(void *);
-void * open_control_fifo(void*);
 void * open_output_fifo(void*);
 int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx);
 void mplayer_wrapper_init();

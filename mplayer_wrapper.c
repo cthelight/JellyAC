@@ -11,8 +11,6 @@
 #define MPW_CALL_BASE "mplayer -slave -idle -input file=\"%s\" -quiet -prefer-ipv4 -nolirc -msglevel statusline=6:global=6 -cache 1024 -cache-min 80 > \"%s\" 2> /dev/null"
 pthread_t fifo_control_thread;
 pthread_mutex_t fifo_control_mutex;
-pthread_t fifo_output_thread;
-pthread_mutex_t fifo_output_mutex;
 pthread_t mplayer_thread;
 pthread_mutex_t run_mutex;
 pthread_t mplayer_output_thread;
@@ -60,28 +58,25 @@ void* start_mplayer(void* playlist_loc_void){
     pthread_mutex_lock(&run_mutex);
     mplayer_running = 0;
     pthread_mutex_unlock(&run_mutex);
+    close(mp_fifo);
 }
 
 void mplayer_wrapper_init(){
     MQ_init(&q);
     pthread_mutex_init(&run_mutex, NULL);
     pthread_mutex_init(&fifo_control_mutex, NULL);
-    pthread_mutex_init(&fifo_output_mutex, NULL);
     pthread_mutex_init(&read_prop_mutex, NULL);
     pthread_mutex_init(&state_mutex, NULL);
     pthread_mutex_init(&prog_mutex, NULL);
     pthread_mutex_init(&play_mutex, NULL);
     pthread_mutex_init(&upd_time_mutex, NULL);
-    pthread_create(&fifo_control_thread, NULL, open_control_fifo, NULL);
-    pthread_create(&mplayer_thread, NULL, start_mplayer, NULL);
     pthread_create(&mplayer_output_thread, NULL, handle_mplayer_output, NULL);
+    mkfifo(MPLAYER_FIFO,S_IRWXU+S_IRWXG + S_IRWXO);
+    pthread_create(&mplayer_thread, NULL, start_mplayer, NULL);
+    mp_fifo = open(MPLAYER_FIFO, O_WRONLY);
 }
 
-void *open_control_fifo(void * v){
-    mkfifo(MPLAYER_FIFO,S_IRWXU+S_IRWXG + S_IRWXO);
-    mp_fifo = open(MPLAYER_FIFO, O_WRONLY);
-    return NULL;
-}
+
 
 char *constr_http_loc(char *str, int start, int end){
     char * song_id = strndup(str + start, end - start);
@@ -231,10 +226,8 @@ void *handle_mplayer_output(void * unused){
     char c = '\0';
     char * cur = buf;
     while(mplayer_running){
-        printf("NOPE\n");
         cur = buf;
         c = '\0';
-        //pthread_mutex_lock(&fifo_output_mutex);
         while(c != '\n' && read(mp_out_fifo, &c, 1) > 0){
             *cur = c;
             cur ++;
@@ -242,7 +235,6 @@ void *handle_mplayer_output(void * unused){
         *cur = '\n';
         cur++;
         *cur = '\0';
-        //pthread_mutex_unlock(&fifo_output_mutex);
         int res_int;
         double res_doub;
         long time = get_time_ms();
@@ -274,6 +266,7 @@ void *handle_mplayer_output(void * unused){
             }
         }
     }
+    close(mp_out_fifo);
 }
 
 
@@ -363,7 +356,10 @@ void set_vol_level(double lvl){
     if((lvl - state.vol) < .5 && (state.vol - lvl) < .5){
         return;
     }
-    
+    pthread_mutex_lock(&state_mutex);
+    state.vol = lvl;
+    pthread_mutex_unlock(&state_mutex);
+    inform_progress_update(state);
     int len = snprintf(NULL, 0, "pausing_keep set_property volume %f\n", lvl);
     char * s = malloc((len + 1) * sizeof(char));
     sprintf(s, "pausing_keep set_property volume %f\n", lvl);
@@ -371,10 +367,7 @@ void set_vol_level(double lvl){
     pthread_mutex_unlock(&fifo_control_mutex);
     write(mp_fifo, s, strlen(s));
     free(s);
-    pthread_mutex_lock(&state_mutex);
-    state.vol = lvl;
-    pthread_mutex_unlock(&state_mutex);
-    inform_progress_update(state);
+    
 }
 
 void toggle_mute(){
