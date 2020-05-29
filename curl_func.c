@@ -161,11 +161,11 @@ int inform_capability(){
         free(x_emb_auth_str);
         free(ser_url);
     }
-
+    return 0;
 }
 
 int inform_initial_playing(char * id, char *name, MQ_t *q){
-    CURL *curl_auth, *curl_full;
+    CURL *curl_auth;
     CURLcode res;
     char * s = constr_initial_playing(id, name, q);
 
@@ -203,7 +203,7 @@ int inform_initial_playing(char * id, char *name, MQ_t *q){
 
 int inform_progress_update(mp_state_t state){
     pthread_mutex_lock(&prog_mutex);
-    CURL *curl_auth, *curl_full;
+    CURL *curl_auth;
     CURLcode res;
     char * s = constr_progress_update(state);
 
@@ -241,7 +241,7 @@ int inform_progress_update(mp_state_t state){
 
 int inform_stopped(mp_state_t state){
     pthread_mutex_lock(&prog_mutex);
-    CURL *curl_auth, *curl_full;
+    CURL *curl_auth;
     CURLcode res;
     char * s = constr_progress_update(state);
 
@@ -302,14 +302,14 @@ char * constr_x_emby_auth_str_tok(){
     len += 92; //Rest of string
 
     str = malloc(len * sizeof(char));
-    int d = sprintf(str, "X-Emby-Authorization: MediaBrowser Client=\"%s\", Device=\"%s\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"", JELLYAC_CLIENT, JELLYAC_DEVICE, device_id, 
+    sprintf(str, "X-Emby-Authorization: MediaBrowser Client=\"%s\", Device=\"%s\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"", JELLYAC_CLIENT, JELLYAC_DEVICE, device_id, 
     JELLYAC_VERSION, acc_tok);
 
     return str;
 }
 
 int initial_jellyfin_auth(){
-    CURL *curl_auth, *curl_full;
+    CURL *curl_auth;
     CURLcode res;
 
     //
@@ -329,11 +329,11 @@ int initial_jellyfin_auth(){
         curl_easy_setopt(curl_auth, CURLOPT_URL, ser_url);
 
         char * cred;
-        int cred_len = snprintf(NULL, 0, CF_AUTH_POST_BASE, server_addr);
+        int cred_len = snprintf(NULL, 0, CF_AUTH_POST_BASE, user, pass);
         cred = malloc((cred_len + 1) * sizeof(char));
         sprintf(cred, CF_AUTH_POST_BASE, user, pass);
 
-        curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, "{\"Username\": \"jellyfin\", \"pw\": \"\"}");
+        curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, cred);
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, write_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
         res = curl_easy_perform(curl_auth);
@@ -362,4 +362,5 @@ void *send_progress(void *vd_state){
         inform_progress_update(*state);
         sleep(2);
     }
+    return NULL;
 }

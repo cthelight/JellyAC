@@ -59,6 +59,7 @@ void* start_mplayer(void* playlist_loc_void){
     mplayer_running = 0;
     pthread_mutex_unlock(&run_mutex);
     close(mp_fifo);
+    return NULL;
 }
 
 void mplayer_wrapper_init(){
@@ -267,6 +268,7 @@ void *handle_mplayer_output(void * unused){
         }
     }
     close(mp_out_fifo);
+    return NULL;
 }
 
 
@@ -330,7 +332,6 @@ double get_vol_level(){
 
 void set_time_pos(double sec){
     pthread_mutex_lock(&upd_time_mutex);
-    double old_pos = state.pos;
     state.pos = sec * 10000000;
     inform_progress_update(state);
     int len = snprintf(NULL, 0, "pausing_keep set_property time_pos %f\n", sec);
@@ -339,9 +340,7 @@ void set_time_pos(double sec){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, s, strlen(s));
     pthread_mutex_unlock(&fifo_control_mutex);
-    long time = get_time_ms();
     free(s);
-    double res_doub;
     double c;
     //Wait until reported time is within 2sec of expected (avoids lag in update on remote control)
     while(!state.stopped && !((c = get_time_pos_h()) - sec * 10000000 < 20000000 && sec * 10000000 - c < 20000000)){
