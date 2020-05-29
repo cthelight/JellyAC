@@ -77,7 +77,6 @@ int main(int argc, char const *argv[])
     int len = snprintf(NULL, 0, "%s/%s", home, JAC_CONFIG_NAME);
     fname = malloc((len + 1) * sizeof(char));
     sprintf(fname, "%s/%s", home, JAC_CONFIG_NAME);
-    printf("%d %s\n", access(fname, F_OK), fname);
     if(access(fname, F_OK) != -1){
         //Then file exists, so open and read
         int fd = open(fname, O_RDONLY);
@@ -88,10 +87,7 @@ int main(int argc, char const *argv[])
         struct timeval t;
         gettimeofday(&t, NULL);
         snprintf(device_id, 128, "%ld", time(NULL) * 1000000 +t.tv_usec);
-        printf("HELLO\n");
         int fd = open(fname, O_WRONLY | O_CREAT, 0666);
-        printf("%d\n", write(fd, device_id, 128));
-        printf("%d\n", errno);
         close(fd);
     }
     //make buf a valid pointer for freeing
