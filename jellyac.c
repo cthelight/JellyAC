@@ -53,7 +53,7 @@ int main(int argc, char const *argv[])
     }
     server_addr = argv[1];
     user = argv[2];
-    if(argc >= 3){
+    if(argc > 3){
         pass = argv[3];
     } else {
         //allow for empty password. MUST BE LAST ARGUMENT

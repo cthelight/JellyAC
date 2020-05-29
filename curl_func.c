@@ -332,7 +332,6 @@ int initial_jellyfin_auth(){
         int cred_len = snprintf(NULL, 0, CF_AUTH_POST_BASE, user, pass);
         cred = malloc((cred_len + 1) * sizeof(char));
         sprintf(cred, CF_AUTH_POST_BASE, user, pass);
-
         curl_easy_setopt(curl_auth, CURLOPT_POSTFIELDS, cred);
         curl_easy_setopt(curl_auth, CURLOPT_WRITEFUNCTION, write_data);
         curl_easy_setopt(curl_auth, CURLOPT_HTTPHEADER, chunk);
