@@ -6,7 +6,7 @@
 #include <time.h>
 #include <errno.h>
 
-#define JAC_CONFIG_NAME "jellyac.conf" 
+#define JAC_CONFIG_NAME ".jellyac.conf" 
 
 char* buf;
 char* acc_tok = NULL;
