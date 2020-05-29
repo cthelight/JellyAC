@@ -88,6 +88,7 @@ int main(int argc, char const *argv[])
         gettimeofday(&t, NULL);
         snprintf(device_id, 128, "%ld_%ld", t.tv_sec, t.tv_usec);
         int fd = open(fname, O_WRONLY | O_CREAT, 0666);
+        write(fd, device_id, 128);
         close(fd);
     }
     //make buf a valid pointer for freeing
