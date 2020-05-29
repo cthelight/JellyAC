@@ -86,7 +86,7 @@ int main(int argc, char const *argv[])
         //generate "unique" device id
         struct timeval t;
         gettimeofday(&t, NULL);
-        snprintf(device_id, 128, "%ld", time(NULL) * 1000000 +t.tv_usec);
+        snprintf(device_id, 128, "%ld_%ld", t.tv_sec, t.tv_usec);
         int fd = open(fname, O_WRONLY | O_CREAT, 0666);
         close(fd);
     }
