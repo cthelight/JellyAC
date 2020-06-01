@@ -17,6 +17,9 @@ extern char device_id[128];
 extern char ip[1024];
 extern int port;
 
+char *rec_buf;
+char buf_malloc = 0;
+
 /**
  * The function that is called whenever an event occurs with the websocket connection.
  * Only ever used for receiving data currently (no responses appear to be used by JellyFin)
@@ -31,95 +34,107 @@ static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, v
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 		;
-			char * buf = (char *)in;
-			jsmn_parser p;
-			jsmntok_t *t;
-			jsmn_init(&p);
-			int r = jsmn_parse(&p, buf, strlen(buf), NULL, 0);
-			t = malloc(r * sizeof(jsmntok_t));
-			jsmn_init(&p);
-			r = jsmn_parse(&p, buf, strlen(buf), t, r);
-			int i;
-			char play_state = 0;
-			char gen_cmd = 0;
-			for(i = 0; i < r; i++){
-				if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "PlayCommand", 11)){
-					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayNow", 7)){
-						//First look for "StartIndex"
-						int j;
-						int d = 0;
-						for(j = i + 2; j < r; j++){
-							if(t[j].type == JSMN_STRING && !strncmp(buf + t[j].start, "StartIndex", 10)){
-								char * s = strndup(buf + t[j + 1].start, t[j + 1].end - t[j + 1].start);
-								d = atoi(s);
-								free(s);
-							}
-						}
-						play_playlist(buf, t, r, d);
-					}
-				} else if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "MessageType", 11)){
-					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Playstate", 9)){
-						play_state = 1;
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "GeneralCommand", 14)){
-						gen_cmd = 1;
-					}
-				}
+			//char * buf = (char *)in;
+			if(buf_malloc){
+				rec_buf = realloc(rec_buf, (1 + len + strlen(rec_buf)));
+			} else {
+				rec_buf = malloc((1 + len) * sizeof(char));
+				*rec_buf = '\0';
+				buf_malloc = 1;
 			}
-
-			for(i = 0; i < r; i++){
-				if(play_state == 1 && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Command", 7)){
-					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PlayPause", 9)){
-						toggle_pause();
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "NextTrack", 9)){
-						next();
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "PreviousTrack", 13)){
-						prev();
-					}  else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Stop", 4)){
-						stop();
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "Seek", 4)){
-						for(; i < r; i++){
-							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "SeekPositionTicks", 17)){
-								char * s = strndup(buf + t[i + 1].start, t[i + 1].end - t[i + 1].start);
-								double d = strtod(s, NULL);
-								set_time_pos(d/10000000.0);
-								free(s);
+			
+			strcat(rec_buf, (char *)in);
+			if(lws_is_final_fragment(wsi)){
+				jsmn_parser p;
+				jsmntok_t *t;
+				jsmn_init(&p);
+				int r = jsmn_parse(&p, rec_buf, strlen(rec_buf), NULL, 0);
+				t = malloc(r * sizeof(jsmntok_t));
+				jsmn_init(&p);
+				r = jsmn_parse(&p, rec_buf, strlen(rec_buf), t, r);
+				int i;
+				char play_state = 0;
+				char gen_cmd = 0;
+				for(i = 0; i < r; i++){
+					if(t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "PlayCommand", 11)){
+						if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "PlayNow", 7)){
+							//First look for "StartIndex"
+							int j;
+							int d = 0;
+							for(j = i + 2; j < r; j++){
+								if(t[j].type == JSMN_STRING && !strncmp(rec_buf + t[j].start, "StartIndex", 10)){
+									char * s = strndup(rec_buf + t[j + 1].start, t[j + 1].end - t[j + 1].start);
+									d = atoi(s);
+									free(s);
+								}
 							}
+							play_playlist(rec_buf, t, r, d);
 						}
-						//set_time_pos()
-					}
-				} else if(gen_cmd == 1 && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Name", 4)){
-					if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetVolume", 9)){
-						char args = 0;
-						for(; i < r; i++){
-							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Arguments", 9)){
-								args = 1;
-							} else if(args && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Volume", 6)){
-								char * s = strndup(buf + t[i + 1].start, t[i + 1].end - t[i + 1].start);
-								double d = strtod(s, NULL);
-								set_vol_level(d);
-								free(s);
-							}
-						}
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "ToggleMute", 10)){
-						toggle_mute();
-					} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "SetRepeatMode", 13)){
-						char args = 0;
-						for(; i < r; i++){
-							if(t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "Arguments", 9)){
-								args = 1;
-							} else if(args && t[i].type == JSMN_STRING && !strncmp(buf + t[i].start, "RepeatMode", 10)){
-								if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "RepeatAll", 9)){
-									set_repeat_all();
-								} else if(t[i + 1].type == JSMN_STRING && !strncmp(buf + t[i + 1].start, "RepeatNone", 10)){
-									set_repeat_none();
-								} 
-							}
+					} else if(t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "MessageType", 11)){
+						if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "Playstate", 9)){
+							play_state = 1;
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "GeneralCommand", 14)){
+							gen_cmd = 1;
 						}
 					}
 				}
-			}
-			free(t);
 
+				for(i = 0; i < r; i++){
+					if(play_state == 1 && t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "Command", 7)){
+						if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "PlayPause", 9)){
+							toggle_pause();
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "NextTrack", 9)){
+							next();
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "PreviousTrack", 13)){
+							prev();
+						}  else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "Stop", 4)){
+							stop();
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "Seek", 4)){
+							for(; i < r; i++){
+								if(t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "SeekPositionTicks", 17)){
+									char * s = strndup(rec_buf + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+									double d = strtod(s, NULL);
+									set_time_pos(d/10000000.0);
+									free(s);
+								}
+							}
+							//set_time_pos()
+						}
+					} else if(gen_cmd == 1 && t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "Name", 4)){
+						if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "SetVolume", 9)){
+							char args = 0;
+							for(; i < r; i++){
+								if(t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "Arguments", 9)){
+									args = 1;
+								} else if(args && t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "Volume", 6)){
+									char * s = strndup(rec_buf + t[i + 1].start, t[i + 1].end - t[i + 1].start);
+									double d = strtod(s, NULL);
+									set_vol_level(d);
+									free(s);
+								}
+							}
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "ToggleMute", 10)){
+							toggle_mute();
+						} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "SetRepeatMode", 13)){
+							char args = 0;
+							for(; i < r; i++){
+								if(t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "Arguments", 9)){
+									args = 1;
+								} else if(args && t[i].type == JSMN_STRING && !strncmp(rec_buf + t[i].start, "RepeatMode", 10)){
+									if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "RepeatAll", 9)){
+										set_repeat_all();
+									} else if(t[i + 1].type == JSMN_STRING && !strncmp(rec_buf + t[i + 1].start, "RepeatNone", 10)){
+										set_repeat_none();
+									} 
+								}
+							}
+						}
+					}
+				}
+				free(t);
+				free(rec_buf);
+				buf_malloc = 0;
+			}
 
             break;
 
