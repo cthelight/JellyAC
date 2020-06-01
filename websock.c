@@ -17,6 +17,10 @@ extern char device_id[128];
 extern char ip[1024];
 extern int port;
 
+/**
+ * The function that is called whenever an event occurs with the websocket connection.
+ * Only ever used for receiving data currently (no responses appear to be used by JellyFin)
+ */
 static int handle_callback( struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len )
 {
 	switch( reason )
@@ -158,6 +162,10 @@ static struct lws_protocols protocols[] =
 	{ NULL, NULL, 0, 0 } /* terminator */
 };
 
+
+/**
+ * Returns a malloc'd char * containing the string representing the path to use ehen constructing a websocket
+ */
 char * get_socket_path(){
 	char * p;
 	int len = 1; //account for null terminator
@@ -172,6 +180,11 @@ char * get_socket_path(){
 	return p;
 }
 
+
+/**
+ * Initializes the websocket connection to the JellyFin server.
+ * Continually listens to the websocket.
+ */
 int init_ws_conn()
 {
 	lws_set_log_level(0, NULL);
@@ -204,16 +217,9 @@ int init_ws_conn()
 			ccinfo.origin = "origin";
 			ccinfo.protocol = protocols[PROTOCOL_EXAMPLE].name;
 			web_socket = lws_client_connect_via_info(&ccinfo);
-			//free(path);
+			free(path);
 		}
 
-		// if( tv.tv_sec != old )
-		// {
-		// 	/* Send a random number to the server every second. */
-		// 	lws_callback_on_writable( web_socket );
-        //     //printf("hi\n");
-		// 	old = tv.tv_sec;
-		// }
 
 		lws_service( context, /* timeout_ms = */ 250 );
 	}

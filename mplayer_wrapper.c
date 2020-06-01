@@ -35,18 +35,15 @@ extern const char *server_addr;
 MQ_t q;
 MQ_elt_t *q_elt;
 
-char play_prev = 0; //Flag indicating mplayer killed to play prev (if existing)
-char stopped = 0; //Flag indicating mplayer killed due to stop
-char muted = 0; //Tracks current mute state (initially not muted)
-char go_back = 0; //Flag to actually go to previous track, not restart
-
-
 mp_state_t state;
 
 void * handle_mplayer_output(void *);
 long get_time_ms();
 
-void* start_mplayer(void* playlist_loc_void){
+/**
+ * Launches an instance of mplayer in idle mode. Should be run in own thread, otherwise will never return (unless mplayer exits)
+ */
+void* start_mplayer(void* unused){
     int len = snprintf(NULL, 0, MPW_CALL_BASE, MPLAYER_FIFO, MPLAYER_OUTPUT_FIFO);
     char * call_str = malloc((len + 1) * sizeof(char));
     sprintf(call_str, MPW_CALL_BASE, MPLAYER_FIFO, MPLAYER_OUTPUT_FIFO);
@@ -62,6 +59,10 @@ void* start_mplayer(void* playlist_loc_void){
     return NULL;
 }
 
+/**
+ * Initializes the mplayer instance.
+ * Initializes all mutexes, opens the necessary fifos, and launches a new thread running an instance of mplayer
+ */
 void mplayer_wrapper_init(){
     MQ_init(&q);
     pthread_mutex_init(&run_mutex, NULL);
@@ -78,7 +79,9 @@ void mplayer_wrapper_init(){
 }
 
 
-
+/**
+ * Given a string, and the start/end of the id field, return a malloc'd string containing the url pointing to the file on the server (with access token attached)
+ */
 char *constr_http_loc(char *str, int start, int end){
     char * song_id = strndup(str + start, end - start);
     int len = snprintf(NULL, 0, MPW_HTTP_LOC_BASE, server_addr, song_id, user_id, device_id, acc_tok);
@@ -89,6 +92,9 @@ char *constr_http_loc(char *str, int start, int end){
     return http_loc;
 }
 
+/**
+ * Tell mplayer to play the song that is at the current location in the queue (elt stored in q_elt).
+ */
 void play_queue_item(){
     pthread_mutex_lock(&fifo_control_mutex);
     int len = snprintf(NULL, 0, "loadfile \"%s\"\n", q_elt->play_loc);
@@ -108,7 +114,10 @@ void play_queue_item(){
 }
 
 
-
+/**
+ * Takes a JSMN parsed string that contains song ids and looks throug it to construct a queue containing the songs in the specified order.
+ * Also tells mplayer to start playing, while also launching a new thread that informs Jellyfin of status
+ */
 int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){ 
     pthread_mutex_lock(&run_mutex);
     if(mplayer_running){
@@ -163,7 +172,9 @@ int play_playlist(char * str, jsmntok_t *t, int num_tok, int start_idx){
     return 0;
 }
 
-
+/**
+ * Toggles the current pause state of mplayer
+ */
 int toggle_pause(){ 
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo,"pause\n",6);
@@ -175,14 +186,23 @@ int toggle_pause(){
     return 0;
 }
 
+/**
+ * Move to the next track in the queue. If no such item, stop playback.
+ */
 int next(){
     if(q_elt->next){
         q_elt = q_elt->next;
+        play_queue_item();
+    } else {
+        stop();
     }
-    play_queue_item();
+    
     return 0;
 }
 
+/**
+ * Move to previous item in the queue. If >5% into song (or at head of queue), just restart current song.
+ */
 int prev(){
     if(get_percent_pos() <= 5 && q_elt->prev){
         q_elt = q_elt->prev;
@@ -192,6 +212,9 @@ int prev(){
     return 0;
 }
 
+/**
+ * Stop the current mplayer instance. Goes back to idling
+ */
 int stop(){
     pthread_mutex_lock(&state_mutex);
     state.stopped = 1;
@@ -203,13 +226,23 @@ int stop(){
     return 0;
 }
 
+/**
+ * Quit the mplayer instance, and close the fifos
+ */
 int quit(){
     stop();
+    pthread_mutex_lock(&fifo_control_mutex);
+    write(mp_fifo,"pausing_keep quit\n", 18);
+    pthread_mutex_unlock(&fifo_control_mutex);
     pthread_join(mplayer_thread, NULL);
     close(mp_fifo);
+    close(mp_out_fifo);
     return 0;
 }
 
+/**
+ * Returns the current number of milliseconds since the linux epoch
+ */
 long get_time_ms(){
     struct timeval tm;
 
@@ -219,6 +252,10 @@ long get_time_ms(){
     return secs;
 }
 
+/**
+ * Opens the output fifo, and parses all output from mplayer.
+ * Should be run in separate thread to allow consistent listening
+ */
 void *handle_mplayer_output(void * unused){
     mkfifo(MPLAYER_OUTPUT_FIFO,S_IRWXU+S_IRWXG + S_IRWXO);
     mp_out_fifo = open(MPLAYER_OUTPUT_FIFO, O_RDONLY);
@@ -271,7 +308,9 @@ void *handle_mplayer_output(void * unused){
     return NULL;
 }
 
-
+/**
+ * Returns the percentage value of the position of mplayer in the current song.
+ */
 int get_percent_pos(){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, "pausing_keep get_percent_pos\n", 29);
@@ -288,8 +327,10 @@ int get_percent_pos(){
     return d;
 }
 
-
-//Bad hack to allow bypass of mutex lock when setting
+/**
+ * Gets the actual location of mplayer in the current trach, in seconds.
+ * Bypasses mutex lock. Only for use when setting position (bad hack but works)
+ */
 double get_time_pos_h(){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, "pausing_keep_force get_time_pos\n", 32);
@@ -306,6 +347,10 @@ double get_time_pos_h(){
     return d;
 }
 
+/**
+ * Gets the actual location of mplayer in the current trach, in seconds.
+ * Use this version when possible (unless deadlock is unavoidable otherwise)
+ */
 double get_time_pos(){
     pthread_mutex_lock(&upd_time_mutex);
     double d = get_time_pos_h();
@@ -313,6 +358,9 @@ double get_time_pos(){
     return d;
 }
 
+/**
+ * Gets the current level of mplayer's volume
+ */
 double get_vol_level(){
     pthread_mutex_lock(&fifo_control_mutex);
     write(mp_fifo, "pausing_keep get_property volume\n", 33);
@@ -329,7 +377,9 @@ double get_vol_level(){
     return d;
 }
 
-
+/**
+ * Sets the current playback location of mplayer to "sec" seconds into the song
+ */
 void set_time_pos(double sec){
     pthread_mutex_lock(&upd_time_mutex);
     state.pos = sec * 10000000;
@@ -351,6 +401,9 @@ void set_time_pos(double sec){
     inform_progress_update(state);
 }
 
+/**
+ * Sets the volume level of the mplayer output to "lvl"
+ */
 void set_vol_level(double lvl){
     if((lvl - state.vol) < .5 && (state.vol - lvl) < .5){
         return;
@@ -369,6 +422,9 @@ void set_vol_level(double lvl){
     
 }
 
+/**
+ * Toggle the mute state of mplayer
+ */
 void toggle_mute(){
     pthread_mutex_lock(&state_mutex);
     state.muted = 1 - state.muted;
@@ -383,12 +439,18 @@ void toggle_mute(){
     inform_progress_update(state);
 }
 
+/**
+ * Set the repeat state to "all"
+ */
 void set_repeat_all(){
     pthread_mutex_lock(&state_mutex);
     state.repeat = 1;
     pthread_mutex_unlock(&state_mutex);
 }
 
+/**
+ * Set the repeat state to "None"
+ */
 void set_repeat_none(){
     pthread_mutex_lock(&state_mutex);
     state.repeat = 0;

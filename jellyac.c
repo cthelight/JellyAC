@@ -19,7 +19,10 @@ const char *pass = NULL;
 
 char ip[1024]; //Assume shorter than 1024;
 int port;
-
+/**
+ * Parses the json returned when authenticating to extract the access token / ID for use in subsequent curl communications.
+ * Stores the key in acc_tok global (for use by other functions)
+ */
 int json_parse_id(){
     jsmn_parser p;
     jsmntok_t *t;
@@ -45,7 +48,9 @@ int json_parse_id(){
 }
 
 
-
+/**
+ * Main entry point. Handles config file and initialization of websockets, mplauyer, etc
+ */
 int main(int argc, char const *argv[])
 {
     if(argc < 2){

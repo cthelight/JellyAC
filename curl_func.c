@@ -21,6 +21,9 @@ extern pthread_mutex_t prog_mutex;
 
 const char * full_json_str = "{\"PlayableMediaTypes\":[\"Audio\"],\"SupportedCommands\":[\"VolumeUp\",\"VolumeDown\",\"Mute\",\"Unmute\",\"ToggleMute\",\"SetVolume\", \"SetRepeatMode\",\"PlayMediaSource\"],\"SupportsPersistentIdentifier\":false,\"SupportsMediaControl\":true,\"DeviceProfile\":{\"MaxStreamingBitrate\":120000000,\"MaxStaticBitrate\":100000000,\"MusicStreamingTranscodingBitrate\":192000,\"DirectPlayProfiles\":[{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\"},{\"Container\":\"flac\",\"Type\":\"Audio\"},{\"Container\":\"webma,webm\",\"Type\":\"Audio\"},{\"Container\":\"wav\",\"Type\":\"Audio\"},{\"Container\":\"ogg\",\"Type\":\"Audio\"}],\"TranscodingProfiles\":[{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"opus\",\"Type\":\"Audio\",\"AudioCodec\":\"opus\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"wav\",\"Type\":\"Audio\",\"AudioCodec\":\"wav\",\"Context\":\"Streaming\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"opus\",\"Type\":\"Audio\",\"AudioCodec\":\"opus\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"mp3\",\"Type\":\"Audio\",\"AudioCodec\":\"mp3\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"},{\"Container\":\"wav\",\"Type\":\"Audio\",\"AudioCodec\":\"wav\",\"Context\":\"Static\",\"Protocol\":\"http\",\"MaxAudioChannels\":\"2\"}],\"ContainerProfiles\":[],\"CodecProfiles\":[{\"Type\":\"VideoAudio\",\"Codec\":\"aac\",\"Conditions\":[{\"Condition\":\"NotEquals\",\"Property\":\"AudioProfile\",\"Value\":\"HE-AAC\"},{\"Condition\":\"Equals\",\"Property\":\"IsSecondaryAudio\",\"Value\":\"false\",\"IsRequired\":false}]},{\"Type\":\"VideoAudio\",\"Conditions\":[{\"Condition\":\"Equals\",\"Property\":\"IsSecondaryAudio\",\"Value\":\"false\",\"IsRequired\":false}]},{\"Type\":\"Video\",\"Codec\":\"h264\",\"Conditions\":[{\"Condition\":\"NotEquals\",\"Property\":\"IsAnamorphic\",\"Value\":\"true\",\"IsRequired\":false},{\"Condition\":\"EqualsAny\",\"Property\":\"VideoProfile\",\"Value\":\"high|main|baseline|constrained baseline\",\"IsRequired\":false},{\"Condition\":\"LessThanEqual\",\"Property\":\"VideoLevel\",\"Value\":\"42\",\"IsRequired\":false}]}],\"SubtitleProfiles\":[{\"Format\":\"vtt\",\"Method\":\"External\"}],\"ResponseProfiles\":[{\"Type\":\"Video\",\"Container\":\"m4v\",\"MimeType\":\"video/mp4\"}],\"MaxStaticMusicBitrate\":320000}}";
 
+/**
+ * Construct a malloc'd string containing the items of the queue in json format as needed by jellyfin
+ */
 char * constr_queue_json(MQ_t * q){
     //Does not include []
     int len = 1;
@@ -47,6 +50,9 @@ char * constr_queue_json(MQ_t * q){
     return s;
 }
 
+/**
+ * returns a malloc'd string that contains the string to send to jellyfin on initial playing
+ */
 char * constr_initial_playing(char *id, char *name, MQ_t *q){
     char * base = "{\"VolumeLevel\":100,\"IsMuted\":false,\"IsPaused\":false,\"RepeatMode\":\"RepeatNone\",\"MaxStreamingBitrate\":140000000,\"PositionTicks\":0,\"PlaybackStartTimeTicks\":%d,\"BufferedRanges\":[{\"start\":0,\"end\":12800000}],\"PlayMethod\":\"Transcode\",\"PlaySessionId\":\"%d\",\"PlaylistItemId\":\"%s\",\"MediaSourceId\":\"%s\",\"CanSeek\":true,\"ItemId\":\"%s\", \"NowPlayingQueue\":[%s]}";
     char *playing_arr = constr_queue_json(q);
@@ -58,6 +64,9 @@ char * constr_initial_playing(char *id, char *name, MQ_t *q){
     return s;
 }
 
+/**
+ * returns a malloc'd string that contains the string to send to jellyfin as progress update
+ */
 char * constr_progress_update(mp_state_t state){
     char *paused_state;
     char *muted_state;
@@ -88,7 +97,9 @@ char * constr_progress_update(mp_state_t state){
     return s;
 }
 
-
+/**
+ * returns a malloc'd string that contains the string to send to jellyfin indicating that playback has stopped
+ */
 char * constr_stopped(mp_state_t state){
     char *paused_state = "true";
     char *muted_state;
@@ -114,6 +125,9 @@ char * constr_stopped(mp_state_t state){
     return s;
 }
 
+/**
+ * Gets responds from curl (entire thing, stitched together as needed) and stores it in "buf" buffer
+ */
 size_t write_data(void *buffer, size_t size, size_t nmmemb, void *userp){
     char *str_buf = (char *)buffer;
 
@@ -128,11 +142,17 @@ size_t write_data(void *buffer, size_t size, size_t nmmemb, void *userp){
     return size*nmmemb;
 }
 
+/**
+ * Used when the response from curl does not matter. simply return the size and be done
+ */
 size_t dump_data(void *buffer, size_t size, size_t nmmemb, void *userp){
     //Dont care about response
     return size*nmmemb;
 }
 
+/**
+ * Send curl message to jellyfin server indicating the client's capibilities
+ */
 int inform_capability(){
     CURL *curl_full = curl_easy_init();
     CURLcode res;
@@ -164,6 +184,9 @@ int inform_capability(){
     return 0;
 }
 
+/**
+ * Tell the jellyfin server that playback has started (with all other relevant info)
+ */
 int inform_initial_playing(char * id, char *name, MQ_t *q){
     CURL *curl_auth;
     CURLcode res;
@@ -200,7 +223,9 @@ int inform_initial_playing(char * id, char *name, MQ_t *q){
     return 4;
 }
 
-
+/**
+ * Send a progress update message to the jellyfin server
+ */
 int inform_progress_update(mp_state_t state){
     pthread_mutex_lock(&prog_mutex);
     CURL *curl_auth;
@@ -238,7 +263,9 @@ int inform_progress_update(mp_state_t state){
     return 4;
 }
 
-
+/**
+ * Tell the jellyfin server that playback has stopped
+ */
 int inform_stopped(mp_state_t state){
     pthread_mutex_lock(&prog_mutex);
     CURL *curl_auth;
@@ -277,7 +304,9 @@ int inform_stopped(mp_state_t state){
 }
 
 
-
+/**
+ * This needs to be attached to initial messages before being authenticated.
+ */
 char * constr_x_emby_auth_str(){
     char* str;
     int len = 0;
@@ -291,6 +320,10 @@ char * constr_x_emby_auth_str(){
     return str;
 }
 
+/**
+ * Construct the string that authenticates the messages being sent to the server.
+ * This string needs to be attached to the curl messages, otherwise they will be ignored
+ */
 char * constr_x_emby_auth_str_tok(){
     char* str;
     int len = 0;
@@ -308,6 +341,9 @@ char * constr_x_emby_auth_str_tok(){
     return str;
 }
 
+/**
+ * Send required messages to authenticate the client to the jellyfin server. Reads the response into "buf" to be parsed later.
+ */
 int initial_jellyfin_auth(){
     CURL *curl_auth;
     CURLcode res;
@@ -348,8 +384,12 @@ int initial_jellyfin_auth(){
     return 4;
 }
 
-//Func to send progress periodically (in thread)
 extern int mp_fifo;
+
+/**
+ * Periodically send updates to the server.
+ * Should be run in separate thread to avoid blocking
+ */
 void *send_progress(void *vd_state){
     mp_state_t * state = (mp_state_t *)vd_state;
     while(!state->stopped && (!(state->item) || !mp_fifo)){

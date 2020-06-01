@@ -2,12 +2,19 @@
 
 void MQ_internal_remove(MQ_elt_t *e);
 
+/**
+ * Initialize the music queue
+ */
 void MQ_init(MQ_t * q){
     q->head = NULL;
     q->tail = NULL;
 }
 
-//NOTE: I Destroy all char * here too.
+/**
+ * De-initialize the music queue
+ * 
+ * NOTE: I Destroy all char * here too.
+ */
 void MQ_deinit(MQ_t *q){
     MQ_elt_t * cur = q->head;
     while(cur){
@@ -17,6 +24,9 @@ void MQ_deinit(MQ_t *q){
     }
 }
 
+/**
+ * Add a new element to the queue with the given parameters
+ */
 void MQ_add(MQ_t *q, char *id, char *play_loc, char *name){
     MQ_elt_t * n = malloc(sizeof(*n));
     n->next = NULL;
@@ -33,6 +43,9 @@ void MQ_add(MQ_t *q, char *id, char *play_loc, char *name){
     }
 }
 
+/**
+ * Remove the specified element from the queue
+ */
 void MQ_remove(MQ_t *q, int pos){
     MQ_elt_t *cur = q->head;
     int i;
@@ -46,7 +59,9 @@ void MQ_remove(MQ_t *q, int pos){
     }
 
 }
-
+/**
+ * Given a queue element, free all related pointers
+ */
 void MQ_internal_remove(MQ_elt_t * e){
     free(e->ID);
     free(e->name);
@@ -54,6 +69,9 @@ void MQ_internal_remove(MQ_elt_t * e){
     free(e);
 }
 
+/**
+ * Print out all elements in the queue in order
+ */
 void MQ_print(MQ_t *q){
     MQ_elt_t *cur = q->head;
     while(cur){
@@ -62,6 +80,9 @@ void MQ_print(MQ_t *q){
     }
 }
 
+/**
+ * Clear out the queue.
+ */
 void MQ_empty(MQ_t *q){
     if(q->head){
         MQ_deinit(q);
