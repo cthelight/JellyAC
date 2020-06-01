@@ -26,6 +26,7 @@ typedef struct {
     char stopped;
     char repeat;
     int percent_pos;
+    char has_name;
     MQ_t q;
 
     //Record times of updates
