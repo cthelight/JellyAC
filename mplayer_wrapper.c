@@ -96,9 +96,6 @@ char *constr_http_loc(char *str, int start, int end){
  * Tell mplayer to play the song that is at the current location in the queue (elt stored in q_elt).
  */
 void play_queue_item(){
-    pthread_mutex_lock(&state_mutex);
-    state.has_name = 0;
-    pthread_mutex_unlock(&state_mutex);
     pthread_mutex_lock(&fifo_control_mutex);
     int len = snprintf(NULL, 0, "loadfile \"%s\"\n", q_elt->play_loc);
     char *play_loc = malloc((len + 1) * sizeof(char));
@@ -114,15 +111,6 @@ void play_queue_item(){
     state.playback_start_ticks = 10000000 * get_time_ms();
     pthread_mutex_unlock(&state_mutex);
     inform_progress_update(state);
-    pthread_mutex_lock(&fifo_control_mutex);
-    write(mp_fifo, "get_file_name\n", 14);
-    pthread_mutex_unlock(&fifo_control_mutex);
-    while(!state.has_name && !state.stopped){
-        usleep(10000);
-        pthread_mutex_lock(&fifo_control_mutex);
-        write(mp_fifo, "get_file_name\n", 14);
-        pthread_mutex_unlock(&fifo_control_mutex);
-    }
 }
 
 
